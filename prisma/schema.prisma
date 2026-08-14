@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String   @id @default(cuid())
+  name              String
+  email             String   @unique
+  passwordHash      String
+  city              String
+  isAdmin           Boolean  @default(false)
+
+  stripeAccountId   String?
+  stripeOnboarded   Boolean  @default(false)
+
+  createdAt         DateTime @default(now())
+
+  services          Service[]
+  dealsAsBuyer      Deal[]    @relation("BuyerDeals")
+  dealsAsProvider   Deal[]    @relation("ProviderDeals")
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  title       String
+  category    String
+  price       Float
+  description String
+  city        String
+  createdAt   DateTime @default(now())
+
+  provider    User     @relation(fields: [providerId], references: [id])
+  providerId  String
+
+  deals       Deal[]
+}
+
+enum DealStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+model Deal {
+  id               String     @id @default(cuid())
+  agreedPrice      Float
+  commissionAmount Float
+  providerAmount   Float
+  status           DealStatus @default(PENDING)
+
+  stripePaymentIntentId String?
+
+  createdAt        DateTime   @default(now())
+  paidAt           DateTime?
+
+  service          Service    @relation(fields: [serviceId], references: [id])
+  serviceId        String
+
+  buyer            User       @relation("BuyerDeals", fields: [buyerId], references: [id])
+  buyerId          String
+
+  provider         User       @relation("ProviderDeals", fields: [providerId], references: [id])
+  providerId       String
+}
