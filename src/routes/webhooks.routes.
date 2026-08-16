@@ -1,0 +1,47 @@
+import { Router } from "express";
+import express from "express";
+import { prisma } from "../lib/prisma.js";
+import { stripe } from "../lib/stripe.js";
+
+const router = Router();
+
+router.post("/stripe", express.raw({ type: "application/json" }), async (req, res) => {
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers["stripe-signature"], process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    return res.status(400).send(`Signature webhook invalide : ${err.message}`);
+  }
+
+  switch (event.type) {
+    case "payment_intent.succeeded": {
+      const intent = event.data.object;
+      const dealId = intent.metadata?.dealId;
+      if (dealId) {
+        await prisma.deal.update({
+          where: { id: dealId },
+          data: { status: "PAID", paidAt: new Date() },
+        });
+      }
+      break;
+    }
+
+    case "account.updated": {
+      const account = event.data.object;
+      if (account.charges_enabled) {
+        await prisma.user.updateMany({
+          where: { stripeAccountId: account.id },
+          data: { stripeOnboarded: true },
+        });
+      }
+      break;
+    }
+
+    default:
+      break;
+  }
+
+  res.json({ received: true });
+});
+
+export default router;
